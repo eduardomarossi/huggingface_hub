@@ -429,6 +429,19 @@ By default, the `hf download` command will be verbose. It will print details suc
 /home/wauplin/.cache/huggingface/hub/models--gpt2/snapshots/11c5a3d5811f50298f278a704980280950aedb10
 ```
 
+### Limit download speed
+
+By default, `hf download` uses as much bandwidth as it can. Use `--max-speed` to cap it, for instance to keep your
+connection usable while a large repo is downloading. The limit is a total: it is shared by all workers, no matter how
+many files are downloaded in parallel.
+
+```bash
+>>> hf download openai-community/gpt2 --max-speed 5MB
+```
+
+The value is expressed in bytes per second and accepts a unit (`5MB`, `500kb`, ...). Note that xet-accelerated
+downloads cannot be rate limited, so setting `--max-speed` falls back to regular HTTP downloads.
+
 ### Download timeout
 
 On machines with slow connections, you might encounter timeout issues like this one:

@@ -120,6 +120,29 @@ You can also enable or disable progress bars for specific groups. This allows yo
 
 [[autodoc]] huggingface_hub.utils.enable_progress_bars
 
+## Limit download speed
+
+Downloads use as much bandwidth as they can. [`~utils.limit_download_speed`] caps the total download speed of the
+process: the limit is shared by every download worker, so the sum of all parallel downloads never exceeds it.
+
+```py
+>>> from huggingface_hub import snapshot_download
+>>> from huggingface_hub.utils import limit_download_speed
+
+# Limit until further notice
+>>> limit_download_speed("5MB")
+>>> snapshot_download("openai-community/gpt2", max_workers=8)  # never exceeds 5MB/s in total
+>>> limit_download_speed(None)  # remove the limit
+
+# ... or limit a single block
+>>> with limit_download_speed(5_000_000):
+...     snapshot_download("openai-community/gpt2", max_workers=8)
+```
+
+### limit_download_speed
+
+[[autodoc]] huggingface_hub.utils.limit_download_speed
+
 ## Configuring the HTTP Backend
 
 <Tip>

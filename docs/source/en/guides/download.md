@@ -254,6 +254,35 @@ vocab.json                   -
 
 Finally, you can also make a dry-run programmatically by passing `dry_run=True` to [`hf_hub_download`] and [`snapshot_download`]. It will return a [`DryRunFileInfo`] (respectively a list of [`DryRunFileInfo`]) with for each file, their commit hash, file name and file size, whether the file is cached and whether the file would be downloaded. In practice, the file will be downloaded if not cached or if `force_download=True` is passed.
 
+## Limit download speed
+
+By default, downloads use as much bandwidth as they can. Use [`~utils.limit_download_speed`] to cap it, for instance to
+keep your connection usable while a large repo is downloading. The limit is a total: it is shared by every download
+worker in the process, no matter how many files are downloaded in parallel.
+
+```py
+>>> from huggingface_hub import snapshot_download
+>>> from huggingface_hub.utils import limit_download_speed
+
+# Never exceed 5MB/s in total, even with 8 workers downloading in parallel
+>>> with limit_download_speed("5MB"):
+...     snapshot_download("openai-community/gpt2", max_workers=8)
+```
+
+The limit is expressed in bytes per second, either as an integer (`5_000_000`) or as a string with a unit (`"5MB"`).
+Calling `limit_download_speed(None)` removes it. The same is available from the CLI with `--max-speed`:
+
+```bash
+>>> hf download openai-community/gpt2 --max-speed 5MB
+```
+
+<Tip warning={true}>
+
+Rate limiting is only implemented for regular HTTP downloads. Since `hf_xet` cannot be rate limited, setting a limit
+disables xet-accelerated downloads (see [Faster downloads](#faster-downloads) below).
+
+</Tip>
+
 ## Faster downloads
 
 Take advantage of faster downloads through `hf_xet`, the Python binding to the [`xet-core`](https://github.com/huggingface/xet-core) library that enables 

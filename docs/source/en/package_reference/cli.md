@@ -1623,6 +1623,7 @@ $ hf download [OPTIONS] REPO_ID [FILENAMES]...
 * `--dry-run / --no-dry-run`: If True, perform a dry run without actually downloading the file.  [default: no-dry-run]
 * `--token TEXT`: A User Access Token generated from https://huggingface.co/settings/tokens.
 * `--max-workers INTEGER`: Maximum number of workers to use for downloading files. Default is 8.  [default: 8]
+* `--max-speed TEXT`: Maximum download speed, shared by all workers (e.g. '5MB', '500kb', or a number of bytes per second). Disables xet-accelerated downloads, which cannot be rate limited.
 * `--help`: Show this message and exit.
 
 Examples

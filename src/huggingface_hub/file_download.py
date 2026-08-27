@@ -54,6 +54,7 @@ from .utils._http import (
     http_stream_backoff,
 )
 from .utils._runtime import is_xet_available
+from .utils._throttle import get_download_limiter
 from .utils._xet import XetTokenType, is_valid_xet_hash, xet_connection_info_refresh_url
 from .utils.sha import sha_fileobj
 from .utils.tqdm import _get_progress_bar_context
@@ -362,6 +363,11 @@ def http_get(
         # If the file is already fully downloaded, we don't need to download it again.
         return
 
+    # A global speed limit (see `limit_download_speed`) is enforced by pausing between chunks, so chunks must be
+    # small enough for those pauses to stay short.
+    limiter = get_download_limiter()
+    chunk_size = limiter.chunk_size if limiter is not None else constants.DOWNLOAD_CHUNK_SIZE
+
     initial_headers = headers
     headers = copy.deepcopy(headers) or {}
     if resume_size > 0:
@@ -370,7 +376,12 @@ def http_get(
         # Any files over 50GB will not be available through basic http requests.
         raise ValueError(
             "The file is too large to be downloaded using the regular download method. "
-            " Install `hf_xet` with `pip install hf_xet` for xet-powered downloads."
+            + (
+                # Xet is bypassed while a speed limit is set, so the usual "install hf_xet" advice would be confusing.
+                "Remove the download speed limit to download it with xet-powered downloads."
+                if limiter is not None
+                else " Install `hf_xet` with `pip install hf_xet` for xet-powered downloads."
+            )
         )
 
     with http_stream_backoff(
@@ -436,8 +447,12 @@ def http_get(
         with progress_cm as progress:
             new_resume_size = resume_size
             try:
-                for chunk in response.iter_bytes(chunk_size=constants.DOWNLOAD_CHUNK_SIZE):
+                for chunk in response.iter_bytes(chunk_size=chunk_size):
                     if chunk:  # filter out keep-alive new chunks
+                        if limiter is not None:
+                            # Throttle *before* accounting for the chunk so the progress bar reports the
+                            # rate the caller asked for rather than the raw speed of the socket reads.
+                            limiter.consume(len(chunk))
                         progress.update(len(chunk))
                         if callable(update_transfer := getattr(progress, "update_transfer", None)):
                             update_transfer(len(chunk))
@@ -1964,7 +1979,9 @@ def _download_to_tmp_and_move(
                 _check_disk_space(expected_size, tmp_path.parent)
                 _check_disk_space(expected_size, destination_path.parent)
 
-            if xet_file_data is not None and is_xet_available():
+            # `hf_xet` has no bandwidth knob, so a download speed limit can only be honored on the HTTP path.
+            # `limit_download_speed` warns about the fallback when the limit is set.
+            if xet_file_data is not None and is_xet_available() and get_download_limiter() is None:
                 logger.debug("Xet Storage is enabled for this repo. Downloading file from Xet Storage..")
                 xet_get(
                     incomplete_path=tmp_path,
@@ -1975,7 +1992,7 @@ def _download_to_tmp_and_move(
                     tqdm_class=tqdm_class,
                 )
             else:
-                if xet_file_data is not None and not constants.HF_HUB_DISABLE_XET:
+                if xet_file_data is not None and not constants.HF_HUB_DISABLE_XET and not is_xet_available():
                     logger.warning(
                         "Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. "
                         "Falling back to regular HTTP download. "

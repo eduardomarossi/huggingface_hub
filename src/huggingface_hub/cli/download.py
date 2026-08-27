@@ -20,7 +20,8 @@ from huggingface_hub import constants
 from huggingface_hub._snapshot_download import snapshot_download
 from huggingface_hub.errors import CLIError
 from huggingface_hub.file_download import DryRunFileInfo, hf_hub_download
-from huggingface_hub.utils import _format_size, parse_hf_uri
+from huggingface_hub.utils import _format_size, limit_download_speed, parse_hf_uri
+from huggingface_hub.utils._parsing import parse_size
 
 from ._cli_utils import RepoIdArg, RepoType, RepoTypeOptionalOpt, RevisionOpt, TokenOpt
 from ._framework import Argument, Option
@@ -90,8 +91,27 @@ def download(
             help="Maximum number of workers to use for downloading files. Default is 8.",
         ),
     ] = 8,
+    max_speed: Annotated[
+        str | None,
+        Option(
+            help=(
+                "Maximum download speed, shared by all workers (e.g. '5MB', '500kb', or a number of bytes per"
+                " second). Disables xet-accelerated downloads, which cannot be rate limited."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Download files from the Hub."""
+    # Parse eagerly so a typo in `--max-speed` fails before any network call.
+    speed_limit: int | None = None
+    if max_speed is not None:
+        try:
+            speed_limit = parse_size(max_speed)
+        except ValueError as error:
+            raise CLIError(f"Invalid value for '--max-speed': {error}") from error
+        if speed_limit <= 0:
+            raise CLIError(f"Invalid value for '--max-speed': must be strictly positive. Got '{max_speed}'.")
+
     if local_dir is not None and cache_dir is not None:
         raise CLIError(
             "Cannot use both `--local-dir` and `--cache-dir` at the same time. "
@@ -222,4 +242,5 @@ def download(
         ]
         out.table(items)
 
-    _print_result(run_download())
+    with limit_download_speed(speed_limit):
+        _print_result(run_download())

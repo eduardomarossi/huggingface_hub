@@ -38,6 +38,7 @@ from huggingface_hub.utils import (
     HFCacheInfo,
     SoftTemporaryDirectory,
 )
+from huggingface_hub.utils._throttle import get_download_limiter
 from huggingface_hub.utils._verification import FolderVerification
 
 from .testing_constants import DUMMY_MODEL_ID, TOKEN
@@ -1110,6 +1111,29 @@ class TestDownloadCommand:
         assert kwargs["repo_type"] == "dataset"
         assert kwargs["allow_patterns"] == ["art/**"]
         assert kwargs["ignore_patterns"] is None
+
+    def test_download_with_max_speed(self, runner: CliRunner) -> None:
+        """`--max-speed` sets a global limit for the duration of the download, and only for it."""
+        limiters = []
+
+        with (
+            patch(
+                "huggingface_hub.cli.download.snapshot_download",
+                side_effect=lambda **kwargs: limiters.append(get_download_limiter()) or "path",
+            ),
+            patch("huggingface_hub.cli.download.hf_hub_download"),
+        ):
+            result = runner.invoke(app, ["download", DUMMY_MODEL_ID, "--max-speed", "5MB"])
+        assert result.exit_code == 0
+        assert limiters[0].rate == 5_000_000
+        assert get_download_limiter() is None  # limit lifted once the command is done
+
+    @pytest.mark.parametrize("value", ["not-a-size", "0"])
+    def test_download_with_invalid_max_speed(self, runner: CliRunner, value: str) -> None:
+        result = runner.invoke(app, ["download", DUMMY_MODEL_ID, "--max-speed", value])
+        assert result.exit_code != 0
+        assert isinstance(result.exception, CLIError)
+        assert "--max-speed" in str(result.exception)
 
     def test_download_without_args_prints_help(self, runner: CliRunner) -> None:
         """`hf download` without args should print help (like groups do), not error out."""

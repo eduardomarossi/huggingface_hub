@@ -115,6 +115,7 @@ from ._safetensors import SafetensorsFileMetadata, SafetensorsRepoMetadata, Tens
 from ._subprocess import capture_output, run_interactive_subprocess, run_subprocess
 from ._telemetry import send_telemetry
 from ._terminal import ANSI, StatusLine, select_choice, tabulate
+from ._throttle import get_download_limiter, limit_download_speed
 from ._typing import is_jsonable, is_simple_optional_type, unwrap_simple_optional_type
 from ._validators import validate_hf_hub_args, validate_repo_id
 from ._xet import (
